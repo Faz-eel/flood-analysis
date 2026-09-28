@@ -14,8 +14,8 @@ This project is not about the surrogate being faster than the physics -
 on this simplified simulator the physics is already cheap, so it isn't.
 The point is generalisation: once trained, the surrogate can be queried
 across many more hypothetical scenarios than would be practical to run
-one at a time, which is what a probabilistic flood-risk map (a later
-step) is actually built from.
+one at a time, which is what a probabilistic flood-risk map
+(monte_carlo.py) is actually built from.
 """
 
 import numpy as np

@@ -14,15 +14,11 @@ flooded/not-flooded mask directly from three per-cell inputs:
 The network is fully convolutional (no Flatten/Dense layers) so that a
 cell's predicted flood probability only ever depends on values actually
 near it, and position is never collapsed into an unordered list of
-numbers the network would have to relearn - the same lesson the DTS
-project's softmax-over-position model was built around.
+numbers the network would have to relearn.
 
-max_distance replaces the old max_reach cap. There is no hard cutoff in
-the physics any more (flood_sim.py now decays severity with distance
-instead of stopping the search after a fixed number of steps), so this
-is no longer "the farthest the flood is allowed to spread" - it is just
-a normalising constant for the distance channel. It is set to a multiple
-of decay_length: past about 5 decay lengths, exp(-steps/decay_length)
+max_distance is a normalising constant for the distance channel, not a
+limit on how far the flood can spread. It is set to a multiple of
+decay_length: past about 5 decay lengths, exp(-steps/decay_length)
 is under 1%, so the rise left at that distance is negligible for any of
 the severities used here, and distance beyond that point carries almost
 no information the network needs anyway.
@@ -115,9 +111,8 @@ def build_surrogate_model(rows, cols):
     A small fully-convolutional network: every layer preserves the
     (rows, cols) grid shape. The final layer is a 1x1 convolution that
     collapses the feature channels down to one flood-probability score
-    per cell, via a sigmoid - directly analogous to the second Conv1D +
-    softmax step in the DTS project's location model, except here each
-    cell gets its own independent probability (a region, not one winner).
+    per cell, via a sigmoid. Each cell gets its own independent
+    probability, since a flood is a region rather than a single location.
     """
     from tensorflow import keras
     from tensorflow.keras import layers

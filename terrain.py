@@ -1,12 +1,6 @@
 """
 Generates a synthetic watershed-like elevation surface.
 
-Rather than using a flat random grid, this builds something that behaves
-like real terrain: a general slope (so water has somewhere to drain to),
-a meandering river channel cut into that slope, and some rolling noise
-so the surface isn't perfectly smooth. This gives the flood-fill logic
-something realistic to work with - a low-lying channel that floods first,
-and higher banks that only flood under larger events.
 """
 
 import numpy as np
@@ -15,10 +9,8 @@ import numpy as np
 def channel_row_positions(rows=80, cols=120):
     """
     Returns the exact row position of the channel centreline at every
-    column - the same formula used to carve the channel into the terrain.
-    Exposed separately so other modules (e.g. flood_sim) can identify
-    genuine channel cells directly, rather than re-deriving the channel's
-    location indirectly from elevation thresholds.
+    column. Tries to produce a sinusoidal shaped channel, between (row_centre-8)
+    and (row_centre + 8) 
     """
     row_centre = rows / 2
     return row_centre + 8 * np.sin(np.linspace(0, 4 * np.pi, cols))

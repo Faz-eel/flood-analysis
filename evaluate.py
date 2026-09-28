@@ -3,8 +3,8 @@ Scores the surrogate model against the real physics simulation
 (simulate_local_flood), on the same held-out test scenarios, and times
 both so the actual speed-up can be reported honestly rather than assumed.
 
-Because flooding is a whole region rather than a single point, "distance
-error" (the metric the DTS project used) doesn't apply here. The right
+Because flooding is a whole region rather than a single point, a
+point-distance error doesn't apply here. The right
 measure is how well the predicted flooded area overlaps the true flooded
 area:
 
