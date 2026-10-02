@@ -2,10 +2,6 @@
 Simulates flood extent for a localized flood event, and generates a set
 of scenarios varying in both location and severity.
 
-Core idea (a localized "bathtub" flood model):
-    A cell floods if it is below the local flood water level AND it is
-    hydraulically connected (via a connected path of low-lying cells) to
-    the source point of that specific event.
 """
 
 from collections import deque
@@ -18,9 +14,7 @@ def find_channel_cells(elevation, spacing=3):
     """
     Identify cells lying on the actual river channel centreline, spaced
     out along its length - used as candidate source points for flood
-    events. Uses the true channel path from terrain.py directly, rather
-    than an elevation threshold, which would incorrectly include the
-    entire low-lying downstream floodplain rather than just the channel.
+    events. Uses the true channel path from terrain.py directly.
     """
     from terrain import channel_row_positions
 
@@ -30,7 +24,11 @@ def find_channel_cells(elevation, spacing=3):
     channel_cells = []
     for c in range(0, cols, spacing):
         r = int(round(channel_path[c]))
+
+        # min ensures it doesn't exceed the last row and max ensures it's not below row 0
+        # (only matters on small grids, where the ±8 row channel swing would run off the edge)
         r = max(0, min(rows - 1, r))
+
         channel_cells.append((r, c))
 
     return channel_cells
@@ -55,34 +53,48 @@ def simulate_local_flood(elevation, source_point, severity, decay_length=10, min
     rows, cols = elevation.shape
     source_elevation = elevation[source_point]
 
+    # Setup: nothing flooded yet, the source is 0 steps from itself, and the
+    # queue of cells still to spread from starts with just the source
     flooded = np.zeros_like(elevation, dtype=bool)
     visited_steps = {source_point: 0}
     queue = deque([source_point])
 
+    # a flood too small to count never gets started
     if severity < min_rise:
         return flooded
 
     flooded[source_point] = True
 
     while queue:
-        r, c = queue.popleft()
-        steps = visited_steps[(r, c)]
+        # take the oldest cell in the queue and look up its distance from the source
+        row, col = queue.popleft()
+        steps = visited_steps[(row, col)]
+
+        # the rise shrinks with distance; stop spreading once it's negligible
         rise = severity * np.exp(-steps / decay_length)
         if rise < min_rise:
-            continue  # negligible flood left this far from the source
+            continue
 
         local_water_level = source_elevation + rise
 
-        for dr, dc in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
-            nr, nc = r + dr, c + dc
-            if not (0 <= nr < rows and 0 <= nc < cols):
+        # try to spread into each of the 4 neighbours: up, down, left, right
+        for row_offset, col_offset in [(-1, 0), (1, 0), (0, -1), (0, 1)]:
+            neighbour_row = row + row_offset
+            neighbour_col = col + col_offset
+
+            # off the edge of the grid
+            if not (0 <= neighbour_row < rows and 0 <= neighbour_col < cols):
                 continue
-            if (nr, nc) in visited_steps:
+            # already flooded (reached earlier by a route at least as short)
+            if (neighbour_row, neighbour_col) in visited_steps:
                 continue
-            if elevation[nr, nc] < local_water_level:
-                visited_steps[(nr, nc)] = steps + 1
-                flooded[nr, nc] = True
-                queue.append((nr, nc))
+
+            # below the water level here -> it floods, and joins the queue
+            # so the flood can carry on spreading from it
+            if elevation[neighbour_row, neighbour_col] < local_water_level:
+                visited_steps[(neighbour_row, neighbour_col)] = steps + 1
+                flooded[neighbour_row, neighbour_col] = True
+                queue.append((neighbour_row, neighbour_col))
 
     return flooded
 
