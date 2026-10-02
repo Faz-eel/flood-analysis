@@ -73,12 +73,81 @@ outputs a flood probability per cell, using only convolutional layers (no
 flattening), so a cell's prediction only ever depends on information
 actually near it.
 
-Only about 2.2% of any grid is actually flooded in a given scenario, so
-the network is trained on a combined crossentropy + Dice loss rather than
-plain crossentropy. Dice measures overlap between the predicted and true
-flooded area directly and gives no credit for correctly predicting the
-dry majority, which keeps the rare flooded cells — the ones that actually
-matter — driving the training signal instead of being outweighed by them.
+### Why Dice loss
+
+Only about 2.2% of any grid is actually flooded in a given scenario.
+Plain binary crossentropy scores every cell on its own and averages over
+all of them, treating a correct dry cell exactly like a correct flooded
+one. With 98% of cells dry, a model can reach a very low loss just by
+being right about the dry majority: one that predicts a 2% flood chance
+everywhere — finding no flooding at all — already scores a crossentropy
+of about 0.1.
+
+Dice loss has no such escape hatch. It is 1 − the Dice score, which
+measures only the overlap between the predicted and true flooded areas:
+
+```
+Dice = 2 × |predicted ∩ true| / (|predicted| + |true|)
+```
+
+In code, with `y_true` (0 = dry, 1 = flooded) and `y_pred` (the
+network's flood probability per cell):
+
+- `|predicted ∩ true|` = sum of `y_true × y_pred`
+- `|predicted|` = sum of `y_pred`
+- `|true|` = sum of `y_true`
+
+The 2 is part of the standard definition. It makes a perfect prediction
+score exactly 1, since the overlap then equals |true| and the denominator
+is 2 × |true|.
+
+#### How each kind of cell affects the score
+
+A six-cell example covering every case:
+
+| Cell | `y_true` | `y_pred` | Case | Adds to overlap | Adds to \|predicted\| | Adds to \|true\| |
+|---|---|---|---|---|---|---|
+| 1 | 1 | 0.9 | flooded, predicted flooded | 0.9 | 0.9 | 1 |
+| 2 | 1 | 0.6 | flooded, predicted unsure | 0.6 | 0.6 | 1 |
+| 3 | 1 | 0.0 | flooded, missed | 0 | 0 | 1 |
+| 4 | 0 | 0.3 | dry, false alarm | 0 | 0.3 | 0 |
+| 5 | 0 | 0.0 | dry, predicted dry | 0 | 0 | 0 |
+| 6 | 0 | 0.0 | dry, predicted dry | 0 | 0 | 0 |
+| | | | **Total** | **1.5** | **1.8** | **3** |
+
+```
+Dice = 2 × 1.5 / (1.8 + 3) = 3.0 / 4.8 = 0.625
+```
+
+- **Correctly predicted dry cells (5, 6)** are completely neutral. They
+  add 0 to the numerator and 0 to the denominator, since both `y_true`
+  and `y_pred` are 0. Adding a thousand more of them would leave the
+  score at 0.625. This is what stops the dry majority from inflating it.
+- **False alarms (4)**, a dry cell with a non-zero prediction, add
+  nothing to the overlap, since they are multiplied by the true 0, but
+  add their full value to |predicted|, lowering the score. The penalty
+  scales with confidence, so 0.3 counts as 0.3 of a false alarm.
+  Predicting 0 there instead raises Dice to 3.0 / 4.5 = 0.667.
+- **Correctly predicted flooded cells (1, 2)** add `1 × y_pred` to the
+  overlap, so a confident 0.9 earns more than an unsure 0.6.
+- **Missed flooded cells (3)** still add 1 to |true| but nothing to the
+  overlap, so the score loses what it could have gained. Predicting 1
+  there instead raises Dice to 5.0 / 5.8 = 0.862.
+
+Dice reaches 1 only with no false alarms and no misses. The lazy "2%
+flood chance everywhere" model from above, which crossentropy scored at
+about 0.1 loss, gets a Dice score of about 0.02 (a Dice loss of 0.98).
+
+The network is trained on crossentropy + Dice combined: crossentropy
+gives a stable cell-by-cell training signal, especially early on, and
+Dice keeps the rare flooded cells from being ignored.
+
+Two implementation details in `dice_loss`: the score is computed over the
+whole training batch at once (every cell of every scenario in the batch,
+flattened together), and a small `smooth` term is added to the top and
+bottom of the fraction so a batch with no flooding doesn't divide by zero.
+
+### Results
 
 Evaluated on 80 held-out test scenarios (scored with IoU and Dice, not
 plain per-cell accuracy, since the dry majority would make accuracy
