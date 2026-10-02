@@ -149,9 +149,22 @@ bottom of the fraction so a batch with no flooding doesn't divide by zero.
 
 ### Results
 
-Evaluated on 80 held-out test scenarios (scored with IoU and Dice, not
-plain per-cell accuracy, since the dry majority would make accuracy
-misleadingly high on its own):
+The surrogate is evaluated on 80 held-out test scenarios — generated
+separately and never seen during training — by comparing its predicted
+flooded area (thresholded at 0.5) with the true one from the physics:
+
+```
+IoU  = |predicted ∩ true| / |predicted ∪ true|
+Dice = 2 × |predicted ∩ true| / (|predicted| + |true|)
+```
+
+Plain per-cell accuracy would be misleading here: with about 98% of cells
+dry, a model that predicts "nothing floods" would already score about 98%
+while being useless. IoU and Dice ignore correctly predicted dry cells,
+so they only reward getting the flooded region right. The two always rank
+predictions the same way (`Dice = 2·IoU / (1 + IoU)`), but IoU is the
+harsher of the two: 80 overlapping cells out of 100 predicted and 100
+true gives an IoU of 0.67 and a Dice of 0.80.
 
 | | Value |
 |---|---|
